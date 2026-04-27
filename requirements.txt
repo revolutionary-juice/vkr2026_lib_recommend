@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+pandas
+scikit-learn
+python-multipart
+passlib[bcrypt]
+email-validator
+psycopg2-binary
