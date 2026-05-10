@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  autocategorizeAdminDocuments,
   cleanupAdminDuplicates,
   createAdminDocument,
   deleteAdminDocument,
@@ -34,6 +35,16 @@ type AdminDocumentForm = {
   abstract: string
   keywords: string
   category: string
+}
+
+type CategoryAnalyticsSortKey = 'category' | 'documents_count' | 'unique_viewers' | 'views_count'
+type SortDirection = 'asc' | 'desc'
+
+type CategoryAnalyticsRow = {
+  category: string
+  documents_count: number
+  unique_viewers: number
+  views_count: number
 }
 
 const emptyDocumentForm: AdminDocumentForm = {
@@ -85,7 +96,14 @@ export default function AdminPage() {
   const [mergeTargetId, setMergeTargetId] = useState('')
   const [dvfuImportQuery, setDvfuImportQuery] = useState('химия')
   const [dvfuImportPages, setDvfuImportPages] = useState('1')
-  const [dvfuImportLimit, setDvfuImportLimit] = useState('50')
+  const [dvfuImportLimit, setDvfuImportLimit] = useState('10')
+  const [isDvfuImporting, setIsDvfuImporting] = useState(false)
+  const [dvfuImportStatus, setDvfuImportStatus] = useState('')
+  const [isCategorizing, setIsCategorizing] = useState(false)
+  const [categoryAnalyticsSort, setCategoryAnalyticsSort] = useState<{
+    key: CategoryAnalyticsSortKey
+    direction: SortDirection
+  }>({ key: 'views_count', direction: 'desc' })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -271,15 +289,59 @@ export default function AdminPage() {
   }
 
   const handleImportDvfuDocuments = async () => {
-    const result = await importDvfuDocuments({
-      query: dvfuImportQuery,
-      pages: Number(dvfuImportPages) || 1,
-      max_records: Number(dvfuImportLimit) || 50,
-    })
-    await Promise.all([loadDocuments(), loadOverview()])
-    setMessage(
-      `Импорт ДВФУ завершен. Найдено ссылок: ${result.urls_found}, добавлено: ${result.imported}, обновлено: ${result.updated}, пропущено: ${result.skipped}`
-    )
+    const query = dvfuImportQuery.trim()
+    if (!query) {
+      setError('Введите запрос для импорта из ДВФУ')
+      return
+    }
+
+    const pages = Math.max(1, Number(dvfuImportPages) || 1)
+    const maxRecords = Math.min(30, Math.max(1, Number(dvfuImportLimit) || 10))
+    setMessage('')
+    setError('')
+    setIsDvfuImporting(true)
+    setDvfuImportStatus(`Идет поиск карточек по запросу "${query}". Это может занять несколько секунд.`)
+
+    try {
+      const result = await importDvfuDocuments({
+        query,
+        pages,
+        max_records: maxRecords,
+      })
+      await Promise.all([loadDocuments(), loadOverview()])
+      const status = `Готово: найдено ссылок ${result.urls_found}, добавлено ${result.imported}, обновлено ${result.updated}, пропущено ${result.skipped}.`
+      setDvfuImportStatus(status)
+      setMessage(`Импорт ДВФУ завершен. ${status}`)
+    } catch (err: any) {
+      console.error(err)
+      setDvfuImportStatus('')
+      setError(err?.response?.data?.detail || 'Не удалось импортировать данные из ДВФУ')
+    } finally {
+      setIsDvfuImporting(false)
+    }
+  }
+
+  const handleAutocategorizeDocuments = async () => {
+    setMessage('')
+    setError('')
+    setIsCategorizing(true)
+
+    try {
+      const result = await autocategorizeAdminDocuments()
+      await Promise.all([loadDocuments(), loadOverview(), getAdminCatalogOptions().then(setCatalogOptions)])
+      const categoryList = Object.entries(result.categories ?? {})
+        .map(([category, count]) => `${category}: ${count}`)
+        .join(', ')
+      setMessage(
+        `Автокатегоризация завершена: проверено ${result.scanned}, обновлено ${result.updated}, без категории осталось ${result.unresolved}.` +
+          (categoryList ? ` Новые категории: ${categoryList}.` : '')
+      )
+    } catch (err: any) {
+      console.error(err)
+      setError(err?.response?.data?.detail || 'Не удалось выполнить автокатегоризацию документов')
+    } finally {
+      setIsCategorizing(false)
+    }
   }
 
   const handleMergeDocuments = async () => {
@@ -342,6 +404,33 @@ export default function AdminPage() {
     saveBlob(blob, filename)
   }
 
+  const handleCategoryAnalyticsSort = (key: CategoryAnalyticsSortKey) => {
+    setCategoryAnalyticsSort((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'desc' ? 'asc' : 'desc' }
+      }
+
+      return { key, direction: key === 'category' ? 'asc' : 'desc' }
+    })
+  }
+
+  const renderCategoryAnalyticsSortArrow = (key: CategoryAnalyticsSortKey) => {
+    if (categoryAnalyticsSort.key !== key) return '↕'
+    return categoryAnalyticsSort.direction === 'desc' ? '↓' : '↑'
+  }
+
+  const sortedCategoryAnalytics = ([...(overview?.category_view_analytics ?? [])] as CategoryAnalyticsRow[]).sort(
+    (left, right) => {
+      const direction = categoryAnalyticsSort.direction === 'asc' ? 1 : -1
+
+      if (categoryAnalyticsSort.key === 'category') {
+        return left.category.localeCompare(right.category, 'ru') * direction
+      }
+
+      return (Number(left[categoryAnalyticsSort.key] ?? 0) - Number(right[categoryAnalyticsSort.key] ?? 0)) * direction
+    }
+  )
+
   if (loading) {
     return <p>Загрузка админки...</p>
   }
@@ -394,14 +483,58 @@ export default function AdminPage() {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>Категория</th>
-                  <th>Документов</th>
-                  <th>Пользователей</th>
-                  <th>Просмотров</th>
+                  <th>
+                    <button
+                      type="button"
+                      className={`admin-sort-header ${categoryAnalyticsSort.key === 'category' ? 'is-active' : ''}`}
+                      onClick={() => handleCategoryAnalyticsSort('category')}
+                    >
+                      <span>Категория</span>
+                      <span className="admin-sort-arrow" aria-hidden="true">
+                        {renderCategoryAnalyticsSortArrow('category')}
+                      </span>
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      type="button"
+                      className={`admin-sort-header ${categoryAnalyticsSort.key === 'documents_count' ? 'is-active' : ''}`}
+                      onClick={() => handleCategoryAnalyticsSort('documents_count')}
+                    >
+                      <span>Документов</span>
+                      <span className="admin-sort-arrow" aria-hidden="true">
+                        {renderCategoryAnalyticsSortArrow('documents_count')}
+                      </span>
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      type="button"
+                      className={`admin-sort-header ${categoryAnalyticsSort.key === 'unique_viewers' ? 'is-active' : ''}`}
+                      onClick={() => handleCategoryAnalyticsSort('unique_viewers')}
+                    >
+                      <span>Пользователей</span>
+                      <span className="admin-sort-arrow" aria-hidden="true">
+                        {renderCategoryAnalyticsSortArrow('unique_viewers')}
+                      </span>
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      type="button"
+                      className={`admin-sort-header ${categoryAnalyticsSort.key === 'views_count' ? 'is-active' : ''}`}
+                      onClick={() => handleCategoryAnalyticsSort('views_count')}
+                    >
+                      <span>Просмотров</span>
+                      <span className="admin-sort-arrow" aria-hidden="true">
+                        {renderCategoryAnalyticsSortArrow('views_count')}
+                      </span>
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {(overview?.category_view_analytics ?? []).map((item: any) => (
+                {sortedCategoryAnalytics.map((item) => (
                   <tr key={item.category}>
                     <td>{item.category}</td>
                     <td>{item.documents_count}</td>
@@ -432,10 +565,19 @@ export default function AdminPage() {
         </div>
 
         <div className="admin-toolbar">
-          <input value={dvfuImportQuery} onChange={(e) => setDvfuImportQuery(e.target.value)} placeholder="Запрос ДВФУ" />
-          <input value={dvfuImportPages} onChange={(e) => setDvfuImportPages(e.target.value)} placeholder="Страниц" />
-          <input value={dvfuImportLimit} onChange={(e) => setDvfuImportLimit(e.target.value)} placeholder="Лимит записей" />
-          <button onClick={handleImportDvfuDocuments}>Импорт из ДВФУ</button>
+          <input value={dvfuImportQuery} onChange={(e) => setDvfuImportQuery(e.target.value)} placeholder="Запрос ДВФУ" disabled={isDvfuImporting} />
+          <input value={dvfuImportPages} onChange={(e) => setDvfuImportPages(e.target.value)} placeholder="Страниц" disabled={isDvfuImporting} />
+          <input value={dvfuImportLimit} onChange={(e) => setDvfuImportLimit(e.target.value)} placeholder="Лимит записей" disabled={isDvfuImporting} />
+          <button onClick={handleImportDvfuDocuments} disabled={isDvfuImporting}>
+            {isDvfuImporting ? 'Загружается...' : 'Импорт из ДВФУ'}
+          </button>
+        </div>
+        {dvfuImportStatus && <div className="admin-import-status">{dvfuImportStatus}</div>}
+
+        <div className="admin-toolbar">
+          <button onClick={handleAutocategorizeDocuments} disabled={isCategorizing}>
+            {isCategorizing ? 'Категоризация...' : 'Автокатегоризация'}
+          </button>
         </div>
 
         <datalist id="admin-categories">

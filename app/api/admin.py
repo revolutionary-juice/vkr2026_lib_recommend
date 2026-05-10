@@ -22,7 +22,8 @@ from app.models.interaction import Interaction
 from app.models.rating import Rating
 from app.models.search_history import SearchHistory
 from app.models.user import User
-from app.services.dvfu_import import import_dvfu_documents
+from app.services.document_categorization import autocategorize_documents
+from app.services.dvfu_import import DvfuImportError, import_dvfu_documents
 from app.services.document_import import import_documents_from_csv
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -59,7 +60,7 @@ class MergeDocumentsPayload(BaseModel):
 class DvfuImportPayload(BaseModel):
     query: str
     pages: int = 1
-    max_records: int = 50
+    max_records: int = 10
 
 
 def _serialize_csv(rows: list[dict], filename: str) -> StreamingResponse:
@@ -259,6 +260,12 @@ def get_admin_documents(
     return documents
 
 
+@router.post("/documents/autocategorize")
+def autocategorize_admin_documents(db: Session = Depends(get_db)):
+    result = autocategorize_documents(db, overwrite=True)
+    return result.__dict__
+
+
 @router.get("/documents/{document_id}")
 def get_admin_document(document_id: int, db: Session = Depends(get_db)):
     return _get_document_or_404(db, document_id)
@@ -301,17 +308,21 @@ def import_documents_csv(db: Session = Depends(get_db)):
 
 @router.post("/documents/import-dvfu")
 def import_documents_dvfu(payload: DvfuImportPayload, db: Session = Depends(get_db)):
-    if payload.pages < 1 or payload.pages > 20:
-        raise HTTPException(status_code=400, detail="Pages must be between 1 and 20")
-    if payload.max_records < 1 or payload.max_records > 500:
-        raise HTTPException(status_code=400, detail="Max records must be between 1 and 500")
+    if payload.pages < 1 or payload.pages > 3:
+        raise HTTPException(status_code=400, detail="Pages must be between 1 and 3")
+    if payload.max_records < 1 or payload.max_records > 30:
+        raise HTTPException(status_code=400, detail="Max records must be between 1 and 30")
 
-    result = import_dvfu_documents(
-        db,
-        query=payload.query,
-        pages=payload.pages,
-        max_records=payload.max_records,
-    )
+    try:
+        result = import_dvfu_documents(
+            db,
+            query=payload.query,
+            pages=payload.pages,
+            max_records=payload.max_records,
+            delay_seconds=3.0,
+        )
+    except DvfuImportError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return result.__dict__
 
 

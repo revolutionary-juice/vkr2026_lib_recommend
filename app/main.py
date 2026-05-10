@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -21,8 +21,6 @@ from app.core.bootstrap import (
 )
 from app.core.database import Base, engine, get_db
 from app.core.runtime_logs import log_error_event, log_failed_request
-from app.models.document import Document
-from app.services.document_import import import_documents_from_csv
 
 ensure_user_table_columns()
 ensure_document_table_columns()
@@ -91,17 +89,3 @@ def root():
 def health_check():
     return {"status": "ok"}
 
-
-@app.get("/documents-test")
-def get_documents_test(db: Session = Depends(get_db)):
-    documents = db.query(Document).all()
-    return documents
-
-
-@app.post("/import-documents")
-def import_documents(db: Session = Depends(get_db)):
-    try:
-        imported_count = import_documents_from_csv(db)
-        return {"imported": imported_count}
-    except Exception as exc:  # pragma: no cover - convenience endpoint
-        return {"error": str(exc)}

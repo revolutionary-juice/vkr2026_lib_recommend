@@ -67,7 +67,7 @@ export default function ProfilePage() {
   )
 
   const stats = useMemo(() => {
-    const viewsCount = viewHistory.reduce((sum, item) => sum + item.weight, 0)
+    const viewsCount = viewHistory.length
     const favoritesCount = favorites.length
     const ratingsCount = ratings.length
     const searchesCount = searchHistory.length

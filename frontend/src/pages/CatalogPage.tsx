@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { getDocuments } from '../api/documents'
 import { api } from '../api/client'
 import SearchBar from '../components/SearchBar'
@@ -13,41 +14,47 @@ export default function CatalogPage() {
   const loadDocuments = async () => {
     const data = await getDocuments(search)
     setDocuments(data)
-
     const userId = getCurrentUserId()
     if (userId && search.trim() !== '') {
       try {
-        await api.post('/search-history/', {
-          user_id: userId,
-          query: search,
-        })
+        await api.post('/search-history/', { user_id: userId, query: search })
       } catch (err) {
         console.error('Ошибка фиксации поискового запроса:', err)
       }
     }
   }
 
-  useEffect(() => {
-    loadDocuments()
-  }, [])
+  useEffect(() => { loadDocuments() }, [])
 
   return (
     <div className="content-stack">
-      <h1 className="page-title">Каталог</h1>
+      <motion.h1
+        className="page-title"
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+      >
+        Каталог
+      </motion.h1>
+
       <SearchBar value={search} onChange={setSearch} onSearch={loadDocuments} />
 
-      <section className="content-section">
+      <motion.section
+        className="content-section"
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1, ease: [0.4, 0, 0.2, 1] }}
+      >
         <div className="section-head">
           <h2>Документы</h2>
           <p>{search.trim() ? `Результаты по запросу: ${search}` : 'Весь каталог библиотеки'}</p>
         </div>
-
         <div className="grid">
-          {documents.map((doc) => (
-            <DocumentCard key={doc.id} document={doc} trackView />
+          {documents.map((doc, i) => (
+            <DocumentCard key={doc.id} document={doc} trackView index={i} />
           ))}
         </div>
-      </section>
+      </motion.section>
     </div>
   )
 }

@@ -45,6 +45,11 @@ export async function importDvfuDocuments(payload: { query: string; pages?: numb
   return response.data
 }
 
+export async function autocategorizeAdminDocuments() {
+  const response = await api.post('/admin/documents/autocategorize')
+  return response.data
+}
+
 export async function mergeAdminDocuments(sourceDocumentId: number, targetDocumentId: number) {
   const response = await api.post('/admin/documents/merge', {
     source_document_id: sourceDocumentId,

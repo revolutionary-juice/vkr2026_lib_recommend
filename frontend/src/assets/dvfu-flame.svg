@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 76" fill="none">
+
+  <!-- Ribbon 1: darkest navy — strong LEFT bow on outer edge -->
+  <path d="
+    M 10,73
+    C  1,57  0,35  7,16
+    C  9,9  10,3  11,1
+    C 14,3  17,9  18,16
+    C 20,35  19,57  17,73
+    Z
+  " fill="#183A7A"/>
+
+  <!-- Ribbon 2: dark blue — moderate left bow -->
+  <path d="
+    M 18,73
+    C 11,57  12,35  16,16
+    C 18,9  20,3  22,1
+    C 25,3  27,9  28,16
+    C 30,35  29,57  26,73
+    Z
+  " fill="#1A5CB0"/>
+
+  <!-- Ribbon 3: medium blue — moderate right bow -->
+  <path d="
+    M 27,73
+    C 24,57  25,35  28,16
+    C 30,9  32,3  34,1
+    C 37,3  40,9  41,16
+    C 43,35  41,57  38,73
+    Z
+  " fill="#1A8CCE"/>
+
+  <!-- Ribbon 4: brightest sky-blue — strong RIGHT bow on outer edge -->
+  <path d="
+    M 37,73
+    C 35,57  36,35  39,16
+    C 41,9  44,3  47,1
+    C 50,3  53,9  54,16
+    C 57,35  54,57  49,73
+    Z
+  " fill="#22B8F0"/>
+
+</svg>
