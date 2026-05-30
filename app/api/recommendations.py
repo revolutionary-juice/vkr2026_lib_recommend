@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.models.document import Document
 from app.models.interaction import Interaction
 from app.models.rating import Rating
+from app.models.search_history import SearchHistory
 from app.models.user import User
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
@@ -55,6 +56,28 @@ def normalize_scores(items: list[dict]) -> dict[int, float]:
         int(item["id"]): (float(item["score"]) - min_score) / (max_score - min_score)
         for item in items
     }
+
+
+def get_recent_search_queries(db: Session, user_id: int, limit: int = 10) -> list[str]:
+    rows = (
+        db.query(SearchHistory.query)
+        .filter(SearchHistory.user_id == user_id)
+        .order_by(SearchHistory.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    queries: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        query = (row[0] or "").strip()
+        normalized = query.lower()
+        if not query or normalized in seen:
+            continue
+        seen.add(normalized)
+        queries.append(query)
+
+    return queries
 
 
 def get_user_interest_profile(db: Session, user_id: int) -> tuple[dict[str, float], set[int]]:
@@ -110,7 +133,9 @@ def get_content_based_recommendations(user_id: int, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="User not found")
 
     category_weights, seen_document_ids = get_user_interest_profile(db, user_id)
-    if not seen_document_ids:
+    search_queries = get_recent_search_queries(db, user_id)
+
+    if not seen_document_ids and not search_queries:
         return []
 
     all_documents = db.query(Document).all()
@@ -120,7 +145,7 @@ def get_content_based_recommendations(user_id: int, db: Session = Depends(get_db
     interacted_documents = [doc for doc in all_documents if doc.id in seen_document_ids]
     candidate_documents = [doc for doc in all_documents if doc.id not in seen_document_ids]
 
-    if not interacted_documents or not candidate_documents:
+    if not candidate_documents:
         return []
 
     all_texts = [build_document_text(doc) for doc in all_documents]
@@ -128,9 +153,27 @@ def get_content_based_recommendations(user_id: int, db: Session = Depends(get_db
     tfidf_matrix = vectorizer.fit_transform(all_texts)
     doc_id_to_index = {doc.id: idx for idx, doc in enumerate(all_documents)}
 
+    query_similarity_by_document: dict[int, float] = {}
+    if search_queries:
+        query_matrix = vectorizer.transform(search_queries)
+        query_weights = [max(0.45, 1.0 - idx * 0.1) for idx in range(len(search_queries))]
+        total_query_weight = sum(query_weights)
+
+        for candidate in candidate_documents:
+            candidate_idx = doc_id_to_index[candidate.id]
+            query_similarities = cosine_similarity(tfidf_matrix[candidate_idx], query_matrix)[0]
+            weighted_query_similarity = sum(
+                similarity * weight for similarity, weight in zip(query_similarities, query_weights, strict=False)
+            )
+            query_similarity_by_document[candidate.id] = (
+                weighted_query_similarity / total_query_weight if total_query_weight else 0.0
+            )
+
     scores = []
     for candidate in candidate_documents:
         candidate_idx = doc_id_to_index[candidate.id]
+
+        document_score = 0.0
 
         weighted_similarity_sum = 0.0
         total_weight = 0.0
@@ -150,11 +193,25 @@ def get_content_based_recommendations(user_id: int, db: Session = Depends(get_db
             total_weight += interaction_weight
 
         if total_weight == 0:
+            if candidate.id not in query_similarity_by_document:
+                continue
+        else:
+            document_score = weighted_similarity_sum / total_weight
+            document_score *= get_category_multiplier(candidate.category, category_weights)
+
+        query_score = query_similarity_by_document.get(candidate.id, 0.0)
+
+        if document_score > 0 and query_score > 0:
+            final_score = document_score * 0.85 + query_score * 0.15
+        elif document_score > 0:
+            final_score = document_score
+        else:
+            final_score = query_score
+
+        if final_score <= 0:
             continue
 
-        average_score = weighted_similarity_sum / total_weight
-        average_score *= get_category_multiplier(candidate.category, category_weights)
-        scores.append((candidate, average_score))
+        scores.append((candidate, final_score))
 
     scores.sort(key=lambda item: item[1], reverse=True)
 
@@ -261,10 +318,10 @@ def get_hybrid_recommendations(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
 
     category_weights, seen_document_ids = get_user_interest_profile(db, user_id)
-    if not seen_document_ids:
-        return []
-
     content_recs = get_content_based_recommendations(user_id, db)
+    if not seen_document_ids:
+        return content_recs[:5]
+
     collaborative_recs = get_collaborative_recommendations(user_id, db)
 
     content_scores = normalize_scores(content_recs)

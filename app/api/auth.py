@@ -3,6 +3,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import verify_password
 from app.models.user import User
 from app.schemas.auth import LoginRequest, LoginResponse
 
@@ -21,7 +22,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if user.is_blocked:
         raise HTTPException(status_code=403, detail="User is blocked")
 
-    if user.password_hash != data.password:
+    if not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid login or password")
 
     return user

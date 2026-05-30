@@ -19,6 +19,9 @@ def get_documents(
     query = db.query(Document)
 
     if search:
+        search = search.strip()
+
+    if search:
         search_pattern = f"%{search}%"
         query = query.filter(
             or_(
@@ -29,6 +32,8 @@ def get_documents(
                 Document.rubrics.ilike(search_pattern),
                 Document.publisher.ilike(search_pattern),
                 Document.isbn.ilike(search_pattern),
+                Document.udk.ilike(search_pattern),
+                Document.bbk.ilike(search_pattern),
             )
         )
 

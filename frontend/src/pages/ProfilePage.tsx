@@ -40,7 +40,26 @@ type RatingItem = {
 type SearchHistoryItem = {
   id: number
   query: string
-  created_at: string
+  created_at?: string
+}
+
+function formatDateTime(value?: string) {
+  if (!value) {
+    return 'дата не указана'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'дата не указана'
+  }
+
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 export default function ProfilePage() {
@@ -212,7 +231,7 @@ export default function ProfilePage() {
               {searchHistory.map((item) => (
                 <div className="profile-item-card" key={item.id}>
                   <h3>{item.query}</h3>
-                  <p><strong>Дата:</strong> {new Date(item.created_at).toLocaleString()}</p>
+                  <p><strong>Дата:</strong> {formatDateTime(item.created_at)}</p>
                 </div>
               ))}
             </div>

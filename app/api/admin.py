@@ -166,7 +166,6 @@ def get_admin_overview(db: Session = Depends(get_db)):
             func.coalesce(func.sum(Interaction.weight), 0).desc(),
             func.coalesce(Document.category, "Uncategorized").asc(),
         )
-        .limit(15)
         .all()
     )
 

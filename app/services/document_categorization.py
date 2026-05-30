@@ -9,6 +9,9 @@ from app.models.document import Document
 
 
 UNCATEGORIZED_VALUES = {"", "uncategorized", "не указана", "не указан", "без категории"}
+INVALID_CATEGORY_VALUES = {
+    "пермь",
+}
 
 
 UDK_CATEGORY_PREFIXES: tuple[tuple[str, str], ...] = (
@@ -47,6 +50,7 @@ UDK_CATEGORY_PREFIXES: tuple[tuple[str, str], ...] = (
     ("80", "филология"),
     ("81", "языкознание"),
     ("82", "литературоведение"),
+    ("91", "география"),
     ("9", "история"),
 )
 
@@ -120,6 +124,14 @@ CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
         "океан",
         "земл",
         "ландшафт",
+    ),
+    "география": (
+        "географ",
+        "картограф",
+        "атлас",
+        "страна",
+        "регион",
+        "территор",
     ),
     "медицина": (
         "медицин",
@@ -228,6 +240,19 @@ CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+CATEGORY_ALIASES: dict[str, str] = {
+    "аналитическая химия": "химия",
+    "биоорганическая химия": "химия",
+    "неорганическая химия": "химия",
+    "органическая химия": "химия",
+    "физическая химия": "химия",
+    "атласная картография": "география",
+    "картография": "география",
+    "основные теории физики": "физика",
+    "теория физики": "физика",
+    "управление предприятием": "менеджмент",
+}
+
 
 @dataclass
 class CategorizationResult:
@@ -249,6 +274,28 @@ def _normalize_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", value).strip().lower()
 
 
+def _normalize_category_value(category: str | None) -> str | None:
+    text = _normalize_text(category)
+    if not text or text in UNCATEGORIZED_VALUES or text in INVALID_CATEGORY_VALUES:
+        return None
+
+    aliased = CATEGORY_ALIASES.get(text)
+    if aliased:
+        return aliased
+
+    scores: Counter[str] = Counter()
+    for canonical_category, markers in CATEGORY_KEYWORDS.items():
+        for marker in markers:
+            normalized_marker = _normalize_text(marker)
+            if normalized_marker and normalized_marker in text:
+                scores[canonical_category] += 1
+
+    if scores:
+        return scores.most_common(1)[0][0]
+
+    return text
+
+
 def _category_from_rubrics(rubrics: str | None) -> str | None:
     text = _normalize_text(rubrics)
     if not text:
@@ -256,7 +303,7 @@ def _category_from_rubrics(rubrics: str | None) -> str | None:
 
     category = text.split("--", 1)[0].split("\n", 1)[0].strip(" .;:-")
     if category and len(category) <= 80:
-        return category
+        return _normalize_category_value(category)
     return None
 
 
@@ -267,7 +314,7 @@ def _category_from_udk(udk: str | None) -> str | None:
 
     for prefix, category in UDK_CATEGORY_PREFIXES:
         if text.startswith(prefix):
-            return category
+            return _normalize_category_value(category)
     return None
 
 
@@ -308,7 +355,7 @@ def guess_document_category(
 
     category, score = scores.most_common(1)[0]
     if score > 0:
-        return category
+        return _normalize_category_value(category)
 
     return _category_from_rubrics(rubrics)
 

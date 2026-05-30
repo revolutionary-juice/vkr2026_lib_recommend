@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import hash_password
 from app.models.document import Document
 from app.models.interaction import Interaction
 from app.models.rating import Rating
@@ -22,7 +23,7 @@ def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
     user = User(
         username=user_data.username,
         email=user_data.email,
-        password_hash=user_data.password,
+        password_hash=hash_password(user_data.password),
         role="reader"
     )
     db.add(user)

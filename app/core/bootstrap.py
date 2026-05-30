@@ -2,6 +2,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.core.database import engine
+from app.core.security import hash_password
 from app.models.user import User
 
 
@@ -65,7 +66,7 @@ def ensure_admin_user(db: Session) -> None:
     admin = db.query(User).filter(User.username == "admin").first()
     if admin:
         admin.email = "admin@example.com"
-        admin.password_hash = "admin"
+        admin.password_hash = hash_password("admin")
         admin.role = "admin"
         admin.is_blocked = 0
         db.commit()
@@ -74,7 +75,7 @@ def ensure_admin_user(db: Session) -> None:
     admin = User(
         username="admin",
         email="admin@example.com",
-        password_hash="admin",
+        password_hash=hash_password("admin"),
         role="admin",
         is_blocked=0,
     )
