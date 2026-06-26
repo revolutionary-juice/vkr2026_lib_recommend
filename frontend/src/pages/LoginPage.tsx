@@ -40,7 +40,7 @@ export default function LoginPage() {
     <div className="auth-page">
       <div className="auth-card">
         <h1>Вход</h1>
-        <p className="auth-subtitle">Войдите в систему библиотеки. Для администратора: логин `admin`, пароль `admin`.</p>
+        <p className="auth-subtitle">Войдите в систему библиотеки.</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <label>

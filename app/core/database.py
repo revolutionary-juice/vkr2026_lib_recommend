@@ -1,7 +1,12 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = "postgresql+psycopg2://postgres:123456@127.0.0.1:5432/vkr_db"
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql+psycopg2://postgres:123456@127.0.0.1:5432/vkr_db",
+)
 
 engine = create_engine(DATABASE_URL)
 

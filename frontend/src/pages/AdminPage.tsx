@@ -2,16 +2,12 @@ import { useEffect, useState } from 'react'
 import {
   autocategorizeAdminDocuments,
   cleanupAdminDuplicates,
-  createAdminDocument,
   deleteAdminDocument,
   deleteAdminInteraction,
   deleteAdminRating,
   deleteAdminSearchRecord,
   deleteAdminUser,
-  downloadAdminBackup,
-  downloadAdminExport,
   getAdminCatalogOptions,
-  getAdminDocument,
   getAdminDocuments,
   getAdminInteractions,
   getAdminLogs,
@@ -23,19 +19,8 @@ import {
   getAdminUsers,
   importAdminDocuments,
   importDvfuDocuments,
-  mergeAdminDocuments,
-  updateAdminDocument,
   updateAdminUser,
 } from '../api/admin'
-
-type AdminDocumentForm = {
-  title: string
-  authors: string
-  year: string
-  abstract: string
-  keywords: string
-  category: string
-}
 
 type CategoryAnalyticsSortKey = 'category' | 'documents_count' | 'unique_viewers' | 'views_count'
 type SortDirection = 'asc' | 'desc'
@@ -45,24 +30,6 @@ type CategoryAnalyticsRow = {
   documents_count: number
   unique_viewers: number
   views_count: number
-}
-
-const emptyDocumentForm: AdminDocumentForm = {
-  title: '',
-  authors: '',
-  year: '',
-  abstract: '',
-  keywords: '',
-  category: '',
-}
-
-function saveBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  window.URL.revokeObjectURL(url)
 }
 
 export default function AdminPage() {
@@ -77,9 +44,6 @@ export default function AdminPage() {
   const [searchHistory, setSearchHistory] = useState<any[]>([])
   const [logs, setLogs] = useState<any>(null)
   const [recommendationDiagnostics, setRecommendationDiagnostics] = useState<any>(null)
-  const [selectedDocument, setSelectedDocument] = useState<any>(null)
-  const [documentForm, setDocumentForm] = useState<AdminDocumentForm>(emptyDocumentForm)
-  const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null)
   const [documentFilters, setDocumentFilters] = useState({
     search: '',
     category: '',
@@ -92,8 +56,6 @@ export default function AdminPage() {
     interaction_type: '',
     query: '',
   })
-  const [mergeSourceId, setMergeSourceId] = useState('')
-  const [mergeTargetId, setMergeTargetId] = useState('')
   const [dvfuImportQuery, setDvfuImportQuery] = useState('химия')
   const [dvfuImportPages, setDvfuImportPages] = useState('1')
   const [dvfuImportLimit, setDvfuImportLimit] = useState('10')
@@ -219,65 +181,8 @@ export default function AdminPage() {
       })
   }, [selectedUserId])
 
-  const resetDocumentForm = () => {
-    setEditingDocumentId(null)
-    setDocumentForm(emptyDocumentForm)
-    setSelectedDocument(null)
-  }
-
-  const handleDocumentFormChange = (field: keyof AdminDocumentForm, value: string) => {
-    setDocumentForm((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const handleDocumentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setMessage('')
-    setError('')
-
-    try {
-      const payload = {
-        ...documentForm,
-        year: Number(documentForm.year),
-        abstract: documentForm.abstract || null,
-        keywords: documentForm.keywords || null,
-        category: documentForm.category || null,
-      }
-
-      if (editingDocumentId !== null) {
-        await updateAdminDocument(editingDocumentId, payload)
-        setMessage(`Документ ${editingDocumentId} обновлен`)
-      } else {
-        await createAdminDocument(payload)
-        setMessage('Документ добавлен')
-      }
-
-      resetDocumentForm()
-      await Promise.all([loadDocuments(), loadOverview(), loadLogs()])
-    } catch (err: any) {
-      console.error(err)
-      setError(err?.response?.data?.detail || 'Не удалось сохранить документ')
-    }
-  }
-
-  const handleEditDocument = async (documentId: number) => {
-    const document = await getAdminDocument(documentId)
-    setSelectedDocument(document)
-    setEditingDocumentId(document.id)
-    setDocumentForm({
-      title: document.title || '',
-      authors: document.authors || '',
-      year: String(document.year || ''),
-      abstract: document.abstract || '',
-      keywords: document.keywords || '',
-      category: document.category || '',
-    })
-  }
-
   const handleDeleteDocument = async (documentId: number) => {
     await deleteAdminDocument(documentId)
-    if (editingDocumentId === documentId) {
-      resetDocumentForm()
-    }
     await Promise.all([loadDocuments(), loadOverview(), loadModerationData(), loadLogs()])
     setMessage(`Документ ${documentId} удален`)
   }
@@ -344,16 +249,6 @@ export default function AdminPage() {
     }
   }
 
-  const handleMergeDocuments = async () => {
-    if (!mergeSourceId || !mergeTargetId) return
-    const result = await mergeAdminDocuments(Number(mergeSourceId), Number(mergeTargetId))
-    setMergeSourceId('')
-    setMergeTargetId('')
-    resetDocumentForm()
-    await Promise.all([loadDocuments(), loadOverview(), loadModerationData(), loadLogs()])
-    setMessage(result.message)
-  }
-
   const handleUserRoleChange = async (userId: number, role: string) => {
     await updateAdminUser(userId, { role })
     await Promise.all([loadUsers(), selectedUserId === userId ? getAdminUser(userId).then(setSelectedUserProfile) : Promise.resolve()])
@@ -388,20 +283,6 @@ export default function AdminPage() {
     setMessage(
       `Очистка завершена: favorite ${result.removed_favorite_duplicates}, view ${result.merged_view_duplicates}, search ${result.removed_search_duplicates}`
     )
-  }
-
-  const handleDownload = async (kind: 'documents' | 'users' | 'history' | 'backup') => {
-    const blob =
-      kind === 'backup' ? await downloadAdminBackup() : await downloadAdminExport(kind)
-    const filename =
-      kind === 'backup'
-        ? 'backup.json'
-        : kind === 'documents'
-          ? 'documents.csv'
-          : kind === 'users'
-            ? 'users.csv'
-            : 'history.csv'
-    saveBlob(blob, filename)
   }
 
   const handleCategoryAnalyticsSort = (key: CategoryAnalyticsSortKey) => {
@@ -551,7 +432,7 @@ export default function AdminPage() {
       <section className="content-section">
         <div className="section-head">
           <h2>Документы и каталог</h2>
-          <p>Добавление, редактирование, импорт CSV, фильтры и объединение дублей</p>
+          <p>Импорт из каталога ДВФУ, автокатегоризация и фильтры каталога</p>
         </div>
 
         <div className="admin-toolbar">
@@ -561,7 +442,6 @@ export default function AdminPage() {
           <input value={documentFilters.year} onChange={(e) => setDocumentFilters((prev) => ({ ...prev, year: e.target.value }))} placeholder="Год" />
           <button onClick={loadDocuments}>Фильтровать</button>
           <button onClick={handleImportDocuments}>Импорт CSV</button>
-          <button onClick={resetDocumentForm} className="auth-secondary-link">Новый документ</button>
         </div>
 
         <div className="admin-toolbar">
@@ -587,49 +467,6 @@ export default function AdminPage() {
           {(catalogOptions.authors ?? []).map((item: string) => <option key={item} value={item} />)}
         </datalist>
 
-        <div className="admin-grid-2">
-          <form className="admin-form card" onSubmit={handleDocumentSubmit}>
-            <h3>{editingDocumentId !== null ? `Редактирование #${editingDocumentId}` : 'Новый документ'}</h3>
-            <input value={documentForm.title} onChange={(e) => handleDocumentFormChange('title', e.target.value)} placeholder="Название" required />
-            <input value={documentForm.authors} onChange={(e) => handleDocumentFormChange('authors', e.target.value)} placeholder="Авторы" required />
-            <input value={documentForm.year} onChange={(e) => handleDocumentFormChange('year', e.target.value)} placeholder="Год" required />
-            <input value={documentForm.category} onChange={(e) => handleDocumentFormChange('category', e.target.value)} placeholder="Категория" />
-            <input value={documentForm.keywords} onChange={(e) => handleDocumentFormChange('keywords', e.target.value)} placeholder="Ключевые слова" />
-            <textarea value={documentForm.abstract} onChange={(e) => handleDocumentFormChange('abstract', e.target.value)} placeholder="Аннотация" rows={6} />
-            <button type="submit">{editingDocumentId !== null ? 'Сохранить изменения' : 'Добавить документ'}</button>
-          </form>
-
-          <div className="card">
-            <h3>Объединение дублей</h3>
-            <input value={mergeSourceId} onChange={(e) => setMergeSourceId(e.target.value)} placeholder="ID документа-источника" />
-            <input value={mergeTargetId} onChange={(e) => setMergeTargetId(e.target.value)} placeholder="ID документа-приемника" />
-            <button onClick={handleMergeDocuments}>Объединить</button>
-
-            {selectedDocument && (
-              <div style={{ marginTop: '18px' }}>
-                <h3>Полная карточка документа</h3>
-                <p><strong>ID:</strong> {selectedDocument.id}</p>
-                <p><strong>Название:</strong> {selectedDocument.title}</p>
-                <p><strong>Авторы:</strong> {selectedDocument.authors}</p>
-                <p><strong>Год:</strong> {selectedDocument.year}</p>
-                <p><strong>Категория:</strong> {selectedDocument.category || 'не указана'}</p>
-                <p><strong>Ключевые слова:</strong> {selectedDocument.keywords || 'не указаны'}</p>
-                <p><strong>Рубрики:</strong> {selectedDocument.rubrics || 'не указаны'}</p>
-                <p><strong>Издательство:</strong> {selectedDocument.publisher || 'не указано'}</p>
-                <p><strong>ISBN:</strong> {selectedDocument.isbn || 'не указан'}</p>
-                <p><strong>УДК:</strong> {selectedDocument.udk || 'не указан'}</p>
-                {selectedDocument.source_url && (
-                  <p>
-                    <strong>Источник:</strong>{' '}
-                    <a href={selectedDocument.source_url} target="_blank" rel="noreferrer">карточка ДВФУ</a>
-                  </p>
-                )}
-                <p><strong>Аннотация:</strong> {selectedDocument.abstract || 'нет'}</p>
-              </div>
-            )}
-          </div>
-        </div>
-
         <div className="admin-table-wrap">
           <table className="admin-table">
             <thead>
@@ -653,7 +490,6 @@ export default function AdminPage() {
                   <td>{document.category || '-'}</td>
                   <td>{document.source_system || '-'}</td>
                   <td className="admin-actions">
-                    <button onClick={() => handleEditDocument(document.id)}>Открыть</button>
                     <button onClick={() => handleDeleteDocument(document.id)} className="auth-secondary-link">Удалить</button>
                   </td>
                 </tr>
@@ -842,19 +678,6 @@ export default function AdminPage() {
             </div>
           </div>
         )}
-      </section>
-
-      <section className="content-section">
-        <div className="section-head">
-          <h2>Экспорт и резервные функции</h2>
-          <p>CSV-выгрузки и JSON backup базы</p>
-        </div>
-        <div className="admin-toolbar">
-          <button onClick={() => handleDownload('documents')}>Экспорт документов</button>
-          <button onClick={() => handleDownload('users')}>Экспорт пользователей</button>
-          <button onClick={() => handleDownload('history')}>Экспорт истории</button>
-          <button onClick={() => handleDownload('backup')}>Резервная копия</button>
-        </div>
       </section>
     </div>
   )

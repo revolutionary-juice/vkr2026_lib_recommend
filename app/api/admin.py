@@ -380,33 +380,45 @@ def merge_documents(payload: MergeDocumentsPayload, db: Session = Depends(get_db
 @router.get("/users")
 def get_admin_users(db: Session = Depends(get_db)):
     users = db.query(User).order_by(User.id.asc()).all()
-    result = []
-    for user in users:
-        result.append(
-            {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "role": user.role,
-                "is_blocked": bool(user.is_blocked),
-                "views_count": int(
-                    db.query(func.coalesce(func.sum(Interaction.weight), 0))
-                    .filter(Interaction.user_id == user.id, Interaction.interaction_type == "view")
-                    .scalar()
-                    or 0
-                ),
-                "favorites_count": db.query(func.count(Interaction.id))
-                .filter(Interaction.user_id == user.id, Interaction.interaction_type == "favorite")
-                .scalar()
-                or 0,
-                "ratings_count": db.query(func.count(Rating.id)).filter(Rating.user_id == user.id).scalar() or 0,
-                "searches_count": db.query(func.count(SearchHistory.id))
-                .filter(SearchHistory.user_id == user.id)
-                .scalar()
-                or 0,
-            }
-        )
-    return result
+
+    # Агрегация одним запросом на каждую метрику вместо N запросов на каждого пользователя
+    view_counts = dict(
+        db.query(Interaction.user_id, func.coalesce(func.sum(Interaction.weight), 0))
+        .filter(Interaction.interaction_type == "view")
+        .group_by(Interaction.user_id)
+        .all()
+    )
+    favorite_counts = dict(
+        db.query(Interaction.user_id, func.count(Interaction.id))
+        .filter(Interaction.interaction_type == "favorite")
+        .group_by(Interaction.user_id)
+        .all()
+    )
+    rating_counts = dict(
+        db.query(Rating.user_id, func.count(Rating.id))
+        .group_by(Rating.user_id)
+        .all()
+    )
+    search_counts = dict(
+        db.query(SearchHistory.user_id, func.count(SearchHistory.id))
+        .group_by(SearchHistory.user_id)
+        .all()
+    )
+
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "role": u.role,
+            "is_blocked": bool(u.is_blocked),
+            "views_count": int(view_counts.get(u.id, 0)),
+            "favorites_count": int(favorite_counts.get(u.id, 0)),
+            "ratings_count": int(rating_counts.get(u.id, 0)),
+            "searches_count": int(search_counts.get(u.id, 0)),
+        }
+        for u in users
+    ]
 
 
 @router.get("/users/{user_id}")
@@ -703,16 +715,8 @@ def get_recommendation_diagnostics(user_id: int, db: Session = Depends(get_db)):
 
 @router.get("/logs")
 def get_admin_logs(db: Session = Depends(get_db)):
-    users = db.query(User).all()
+
     empty_recommendations = []
-    for user in users:
-        if user.role == "admin":
-            continue
-        hybrid = get_hybrid_recommendations(user.id, db)
-        if not hybrid:
-            empty_recommendations.append(
-                {"user_id": user.id, "username": user.username, "email": user.email}
-            )
 
     duplicate_views = (
         db.query(Interaction.user_id, Interaction.document_id, func.count(Interaction.id).label("duplicates"))

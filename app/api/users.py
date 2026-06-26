@@ -14,6 +14,12 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("/", response_model=UserResponse)
 def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
+    if len(user_data.username) < 3:
+        raise HTTPException(status_code=400, detail="Логин должен содержать не менее 3 символов")
+
+    if len(user_data.password) < 8:
+        raise HTTPException(status_code=400, detail="Пароль должен содержать не менее 8 символов")
+
     existing_user = db.query(User).filter(
         (User.username == user_data.username) | (User.email == user_data.email)
     ).first()

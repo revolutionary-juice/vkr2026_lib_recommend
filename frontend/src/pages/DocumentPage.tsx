@@ -136,6 +136,7 @@ export default function DocumentPage() {
       <p><strong>Рубрики:</strong> {document.rubrics || 'не указаны'}</p>
       <p><strong>Издательство:</strong> {document.publisher || 'не указано'}</p>
       <p><strong>ISBN:</strong> {document.isbn || 'не указан'}</p>
+      <p><strong>ББК:</strong> {document.bbk || 'не указан'}</p>
       <p><strong>УДК:</strong> {document.udk || 'не указан'}</p>
       <p><strong>Аннотация:</strong> {document.abstract || 'нет'}</p>
 

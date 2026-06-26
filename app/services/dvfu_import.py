@@ -180,6 +180,12 @@ def parse_document_card(url: str) -> dict[str, object] | None:
     udk_match = re.search(r"<b>\s*УДК\s*</b>.*?<div[^>]*>(.*?)</div>", source, flags=re.IGNORECASE | re.DOTALL)
     udk = _strip_tags(udk_match.group(1)) if udk_match else None
 
+    bbk_match = re.search(r"<b>\s*ББК\s*</b>.*?<div[^>]*>(.*?)</div>", source, flags=re.IGNORECASE | re.DOTALL)
+    bbk = _strip_tags(bbk_match.group(1)) if bbk_match else None
+    if not bbk:
+        bbk_inline = re.search(r"ББК\s+([\d.,\-\(\)\s]+)", _strip_tags(source))
+        bbk = bbk_inline.group(1).strip() if bbk_inline else None
+
     rubrics = _extract_between(
         source,
         r"<b>\s*Рубрики:\s*</b>",
@@ -239,7 +245,7 @@ def parse_document_card(url: str) -> dict[str, object] | None:
         "publisher": publisher,
         "isbn": isbn,
         "udk": udk,
-        "bbk": None,
+        "bbk": bbk,
         "rubrics": rubrics,
         "source_url": url,
         "source_system": source_system,

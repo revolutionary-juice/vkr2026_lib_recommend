@@ -1,0 +1,13 @@
+.venv
+__pycache__
+.git
+.idea
+.claude
+*.pyc
+dump.sql
+scripts/
+tests/
+data/
+make_pptx.py
+NEXT_CHAT_NOTES.md
+frontend/

@@ -12,7 +12,7 @@ export default function Layout() {
       <header className="topbar">
         <Link to="/" className="brand">
           <img src={dvfuLogo} alt="ДВФУ" className="brand-logo" />
-          Рекомендательная подсистема
+          Рекомендательная система
         </Link>
 
         <nav className="nav">
