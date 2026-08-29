@@ -11,7 +11,19 @@ from urllib.request import Request, urlopen
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
-from app.services.document_categorization import guess_document_category
+from app.services.document_categorization import (
+    CATEGORY_KEYWORDS,
+    UDK_CATEGORY_PREFIXES,
+    guess_document_category,
+)
+
+
+KNOWN_CATEGORIES = set(CATEGORY_KEYWORDS.keys()) | {category for _, category in UDK_CATEGORY_PREFIXES}
+
+
+def _forced_category_from_query(query: str) -> str | None:
+    normalized = query.strip().lower().replace("ё", "е")
+    return normalized if normalized in KNOWN_CATEGORIES else None
 
 
 BASE_URL = "https://library.dvfu.ru"
@@ -262,6 +274,7 @@ def import_dvfu_documents(
     delay_seconds: float = 3.0,
 ) -> DvfuImportResult:
     urls = collect_document_urls(query=query, pages=pages)
+    forced_category = _forced_category_from_query(query)
     imported = 0
     updated = 0
     skipped = 0
@@ -278,6 +291,9 @@ def import_dvfu_documents(
         if not payload:
             skipped += 1
             continue
+
+        if forced_category:
+            payload["category"] = forced_category
 
         existing = db.query(Document).filter(Document.source_url == url).first()
         if existing:

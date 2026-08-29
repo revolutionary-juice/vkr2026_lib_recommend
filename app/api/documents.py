@@ -80,7 +80,7 @@ def get_popular_documents(limit: int = 10, db: Session = Depends(get_db)):
 def get_recent_documents(limit: int = 10, db: Session = Depends(get_db)):
     documents = (
         db.query(Document)
-        .order_by(Document.year.desc(), Document.id.desc())
+        .order_by(Document.id.desc())
         .limit(limit)
         .all()
     )
